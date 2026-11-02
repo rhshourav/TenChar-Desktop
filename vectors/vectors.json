@@ -1,0 +1,94 @@
+{
+ "version": 1,
+ "spec": "TenChar Desktop plan, Oct 28 2026",
+ "pairing": {
+  "code": "ABCDEFGHJKLMNPQR",
+  "room": "f1b914add3fb600eb619488f2d3e622c",
+  "codeToken": "5d3b0d40eb1b4274dde289ad6d7f6f84f6c4c64d23f2ddcf",
+  "codeKey": "e35b8e3b2f8d6601f12b26e95cd2eed063ed1be586555ffe1dcf739f124425ac"
+ },
+ "handshake": {
+  "initiator_member": "A",
+  "A": {
+   "id": "11111111111111111111111111111111",
+   "ik": "c55714f0053d8407daef82e9436bd1bf4d85fc2ce9b5fbf4ccdf28c47c00490a",
+   "ek": "4274d0c7202b54679cd58c8bd52215e708353a8d98c9c7922195f73a19e20924",
+   "ikp": "0a09a1219ead905cd1ac851e11a4515094a2d4405256ada9203202c756401060",
+   "ekp": "f81dce28d2389da770f1260d5c2f3f2df50d83a0567f0951b8f9884d89e2c064",
+   "commit": "72988d4d4ea835bec13f32b95ddabd905adb1ced50f03bbf0563241bb793051b"
+  },
+  "B": {
+   "id": "22222222222222222222222222222222",
+   "ik": "3939e870c0988b891c685c78af24b0d4fdb4847b0e14f7ded7c6869b17a5244e",
+   "ek": "e0e6fc2e5f0406c88ef66edd76ea6a9f1607d37b428fce7eb71801dda67e91e6",
+   "ikp": "e78bf327afc1728a3cca0f0d7cbfed4834f43b0d4d3b3541e074bc92d137f538",
+   "ekp": "0890ffab20f2e75e16fcd411448646cf5e83e987a6d9e4be695fb3d0c77daf4d",
+   "commit": "d9d3ed10d2d7afa17ab9a95d2fdcd09e6d588afe049123d748eb4221df488326"
+  },
+  "dh": [
+   "5b42e214dedacd187996ad772a002d51bcd145e1118a16bedbd6d3fe6904f662",
+   "8ed16503815188fa2bbff1ad21dd70887ab0d3c015cf2e3d360e2bf9e2dac11f",
+   "68336892aff2c1d1d27290ccea5d292f531f8d9cffa764d088578adeeba89666",
+   "39206fbf8b405fb8f41f1a9db88974647635128f21d83649ae602dc82eb4be50"
+  ],
+  "SK": "aa8a8c3f8c457161b58420d661f6e66fef46050268d55d9cfcbbcd323e2f7e12",
+  "AD": "0a09a1219ead905cd1ac851e11a4515094a2d4405256ada9203202c756401060e78bf327afc1728a3cca0f0d7cbfed4834f43b0d4d3b3541e074bc92d137f538",
+  "verification": "9617 7894"
+ },
+ "ratchet": {
+  "AD": "0a09a1219ead905cd1ac851e11a4515094a2d4405256ada9203202c756401060e78bf327afc1728a3cca0f0d7cbfed4834f43b0d4d3b3541e074bc92d137f538",
+  "SK": "aa8a8c3f8c457161b58420d661f6e66fef46050268d55d9cfcbbcd323e2f7e12",
+  "injected": {
+   "R_first_ratchet_priv": "648bdd3fdd8a1239ce3cbf0eb3c47aa7b03bb4f22a808e1898030ab340a0559c",
+   "I_ratchet2_priv": "20ca964c30e1f4283d7f2e7f4b9b5a84b5de36370f7d387c6f2934c79645d613",
+   "R_ratchet3_priv": "d22eb7b063b6eb6f5ddebc026536601bbade07712597c30f79ca075757f647af",
+   "I_ratchet4_priv": "2a478ae0029e12366749929f4f1025a47c51c2357b25bc49ac41ca22861f0a99",
+   "nonces_in_send_order": [
+    "1f4f18fb187434dbf293196b",
+    "4325887fcc120f29fb1e352b",
+    "eb09a375973996c283af9be1",
+    "d74b19172d894ff6e7010eb5",
+    "e499814e9d2a994c47ef26d4"
+   ]
+  },
+  "delivery_order": [
+   1,
+   2,
+   4,
+   3,
+   5
+  ],
+  "steps": [
+   {
+    "from": "I",
+    "text": "hi",
+    "envelope_hex": "01f81dce28d2389da770f1260d5c2f3f2df50d83a0567f0951b8f9884d89e2c06400000000000000001f4f18fb187434dbf293196bb98573e7a04f6ed52a6bf5c01a6c3be41d9bc2d7fb2b09d1fc7cffe840c8e9963d7c3016180eb27c6476b7745ef056e8e43774b77dc1dc3c2efce25a65fb0d48929955323abc1b1d7de8d12f949fb26dbbe6",
+    "note": "first message, no DH step"
+   },
+   {
+    "from": "R",
+    "text": "yo",
+    "envelope_hex": "01e35241e8734073d37826079b0b7c56f38ea11532690e92a97e5c8eb5d2cd642c00000000000000004325887fcc120f29fb1e352b063998caafa65c1f6d96aedee23f76dc02b13400912d7fefa5a54fbc76cb92a96f6110853e73ad86982d46ca8d7813ceab548421cb66217bec4b0f9be67e46a7b7f19803357c8c45e7ea8344a5a41aea6fab",
+    "note": "responder's first send"
+   },
+   {
+    "from": "I",
+    "text": "ok",
+    "envelope_hex": "01589106ad2908a6090ff85a6aab66b1f4fb15612964170b4337bd2179f7037a0a0000000100000000eb09a375973996c283af9be18923e57b030e584aad1020315232e6901617592fe1d53b17b14b3b5777858cb9eb124e0c816a1ff3aec62eb33669ad1ef0fa20fd04f7d04f70a1c05da1c4bd4791f455c0bc7ec629e2cdb5e4544186484851",
+    "note": "new ratchet key, pn=1, n=0; delivered AFTER message 4 (out of order)"
+   },
+   {
+    "from": "I",
+    "text": "ok2",
+    "envelope_hex": "01589106ad2908a6090ff85a6aab66b1f4fb15612964170b4337bd2179f7037a0a0000000100000001d74b19172d894ff6e7010eb575d47c7d423d898b71281ce20f4f5d626bbed87e8154160a5345ec473ac92c379916f19260e524c1ea3a4e532eac26e262fa3114533e5877c4ce70ac8b320dd9bf75397c91116fec14df7226c08317cf2ef1",
+    "note": "n=1"
+   },
+   {
+    "from": "R",
+    "text": "bye",
+    "envelope_hex": "01ced216faae029963e3fc6381004fd299626f915bde3080c50c66672868db1b420000000100000000e499814e9d2a994c47ef26d475cbcf6b441966e0a9baadc2cc43d12d16b0b2f2381b95aafd2d040ce46384ab1c483938578fa108d269ad0c5552ebbb14d9c085beb6e61a9acbb7025e90f21db8e8986aa6ef83bf09dc6165080c07d3e208",
+    "note": "R's new ratchet key after DH step"
+   }
+  ]
+ }
+}
