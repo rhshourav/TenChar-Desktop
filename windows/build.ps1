@@ -65,12 +65,21 @@ function Install-WithWinget {
 }
 
 # ---- Visual Studio (compiler, Windows SDK, CMake, Ninja) --------------------------------------------------
-function Get-VsPath {
+function Get-VsPath([switch]$AnyWorkload) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path $vswhere)) { return $null }
-    $p = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if ($AnyWorkload) {   # any Visual Studio / Build Tools install, even one without the C++ workload
+        $p = & $vswhere -all -prerelease -products '*' -property installationPath
+    } else {
+        $p = & $vswhere -latest -prerelease -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    }
     if ($p) { return ($p | Select-Object -First 1) }
     return $null
+}
+
+function Test-Admin {
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    return (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
 function Import-VsEnvironment([string]$VsPath) {
@@ -91,10 +100,35 @@ Step 'Visual Studio (C++ compiler)'
 $vs = Get-VsPath
 if (-not $vs) {
     if (-not $InstallPrereqs) { throw 'Visual Studio 2022 with the "Desktop development with C++" workload was not found. Re-run with -InstallPrereqs, or install it yourself.' }
-    Write-Host 'Installing Visual Studio 2022 Build Tools (this takes a while and needs an administrator shell)...'
-    Install-WithWinget -Id 'Microsoft.VisualStudio.2022.BuildTools' -Override '--passive --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended'
+    if (-not (Test-Admin)) { throw 'Installing the C++ workload needs an administrator shell. Right-click build-windows.bat and choose "Run as administrator" (or open PowerShell as administrator).' }
+    $existing = Get-VsPath -AnyWorkload
+    if ($existing) {
+        # Visual Studio or Build Tools is registered but WITHOUT a usable C++ workload: winget cannot add a workload to an
+        # existing install, so ask the Visual Studio Installer to modify it first.
+        Write-Host "Visual Studio is registered at $existing but has no usable C++ workload. Trying to add it..."
+        $setup = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+        if (Test-Path $setup) {
+            $p = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @('modify', '--installPath', "`"$existing`"", '--add', 'Microsoft.VisualStudio.Workload.VCTools', '--includeRecommended', '--passive', '--norestart')
+            if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { Write-Warning "The Visual Studio Installer returned exit code $($p.ExitCode); trying the Build Tools installer instead." }
+        }
+    }
+    if (-not (Get-VsPath)) {
+        # Still nothing usable. Use Microsoft's own bootstrapper rather than winget: it installs a fresh copy, and it also
+        # repairs/modifies one that winget reports as "already installed" but whose registration is incomplete.
+        Write-Host 'Downloading the Visual Studio Build Tools installer and adding the C++ workload (this takes a while)...'
+        $boot = Join-Path ([IO.Path]::GetTempPath()) 'vs_BuildTools.exe'
+        Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vs_BuildTools.exe' -OutFile $boot -UseBasicParsing
+        $p = Start-Process -FilePath $boot -Wait -PassThru -ArgumentList @('--add', 'Microsoft.VisualStudio.Workload.VCTools', '--includeRecommended', '--passive', '--norestart', '--wait')
+        if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw "The Visual Studio Build Tools installer failed (exit code $($p.ExitCode))." }
+    }
     $vs = Get-VsPath
-    if (-not $vs) { throw 'Visual Studio Build Tools did not install correctly. Install the "Desktop development with C++" workload by hand.' }
+    if (-not $vs) {
+        $vswhereExe = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+        Write-Host '--- what vswhere can see (send this if the build still stops here) ---'
+        if (Test-Path $vswhereExe) { & $vswhereExe -all -prerelease -products '*' -format text } else { Write-Host 'vswhere.exe is missing: the Visual Studio Installer is not installed.' }
+        Write-Host '------------------------------------------------------------------------'
+    }
+    if (-not $vs) { throw 'The C++ workload is still not visible. A restart may be needed; otherwise open Visual Studio Installer, choose Modify, and tick "Desktop development with C++". Then run this script again.' }
 }
 Import-VsEnvironment $vs
 Write-Host "using $vs"
