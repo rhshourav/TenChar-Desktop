@@ -99,27 +99,3 @@ Not done: an MSI installer, and pinning vcpkg and the GitHub actions to exact co
    strings are a `u16` length plus standard UTF-8, not Java's modified UTF-8. The header's chain counters are big-endian.
 5. Reduced transparency, motion and high contrast are **in-app switches only** (no OS detection yet).
 
-## What has NOT been tested (be honest with yourself about these)
-
-- **Windows and macOS builds.** Not compiled. `platform_mac.mm` (capture exclusion), the Windows branches of
-  `platform.cpp` and `vault.cpp` (display affinity, clipboard-history exclusion, `MoveFileExW`) were written carefully
-  but never run. MSVC `/W4 /WX` may need small fixes.
-- **A real relay.** `relay/src/core.js` was not available. The relay client follows `RelayClient.kt`; the fake relay
-  in `tests/fake_relay.hpp` is *my reading of that protocol*, so agreement with it proves consistency, not correctness.
-  Live phone↔desktop interop is still to do (Gate C).
-- **Screen readers.** Only Qt's accessibility tree was inspected. Narrator, VoiceOver and NVDA have not been used.
-- **Real Bangla input** through an operating-system IME, and the 10-character counter against the phone on a shared
-  list of test strings (Qt 6.4's Unicode tables may differ from ICU for conjuncts).
-- **GPU performance.** Screenshots used the software renderer. The 60 fps / idle-CPU targets are unmeasured.
-- Qt **6.4** was what the sandbox had; the plan wants the current LTS. Nothing here needs more than 6.4.
-- Installers, signing, notarisation, checksummed dependency pins, reproducible builds: not started.
-- Start at login, locking on OS screen lock, Argon2id (PBKDF2 used, awaiting your decision), changing the passphrase
-  from the UI (the vault supports it), `mlock` of secret pages, Windows DPAPI / macOS Keychain wrapping.
-- Passphrase text passes through Qt/JavaScript strings before it reaches the engine; those copies cannot be wiped.
-- The Bangla strings are mine and need a native speaker. The logo is two drawn letters: the phone's image was not available.
-- The independent cryptography review.
-
-## Decisions I assumed (change them if you disagree)
-
-OpenSSL 3 for the C++ crypto (decision 7); PBKDF2, no Argon2id (4); no fetching while locked (8); injectable
-randomness in both cores (9); one pairing per device (1); Windows and macOS first (3).
