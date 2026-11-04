@@ -1,0 +1,69 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # Qt (downloaded by aqtinstall) and vcpkg's compiled OpenSSL are cached, so only the first run is slow.
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .deps/Qt
+            .deps/vcpkg-archives
+          key: windows-deps-${{ hashFiles('windows/build.ps1', 'vcpkg.json') }}
+
+      - name: Build, test, package, smoke-test
+        shell: pwsh
+        run: ./windows/build.ps1 -InstallPrereqs -Smoke
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: TenChar-win64
+          path: |
+            dist/TenChar-win64.zip
+            dist/TenChar-win64.zip.sha256
+            dist/BUILD-INFO.txt
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-and-logs
+          path: |
+            dist/smoke
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+
+  release:
+    # A tag such as v0.1.0 attaches the zip and its checksum to a GitHub release.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: TenChar-win64
+          path: out
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/TenChar-win64.zip
+            out/TenChar-win64.zip.sha256
+            out/BUILD-INFO.txt

@@ -34,6 +34,37 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software build/app/tenchar --preview 
 
 `TC_BUILD_APP=OFF` builds and tests only the Qt-free targets.
 
+## Build on Windows (automated; the scripts have not been run on Windows yet: report the first error you hit)
+
+**One command, locally.** Double-click `build-windows.bat` (the first time, right-click → *Run as administrator*), or:
+
+```
+powershell -ExecutionPolicy Bypass -File windows\build.ps1 -InstallPrereqs
+```
+
+It finds or installs Visual Studio Build Tools (winget), Git and Python (winget), Qt 6.8 (aqtinstall) and OpenSSL 3 (vcpkg,
+linked statically), then configures, builds, runs all tests, collects the Qt runtime with `windeployqt`, and writes:
+
+- `dist\TenChar-win64\tenchar.exe` (run it from there), with `THIRD-PARTY-NOTICES.txt` and font licences
+- `dist\TenChar-win64.zip` and `dist\TenChar-win64.zip.sha256`
+- `dist\BUILD-INFO.txt` (commit, compiler, Qt, vcpkg, hash)
+
+Useful switches: `-QtDir C:\Qt\6.8.3\msvc2022_64` (use a Qt you already have), `-Smoke` (launch the real app headless and
+screenshot seven screens, plus the accessibility tree, into `dist\smoke`), `-Clean`, `-SkipTests`,
+`-Triplet x64-windows` (OpenSSL as a DLL instead of static), `-SignThumbprint <sha1>` (sign `tenchar.exe` with a certificate).
+
+**In the cloud.** Push the repository to GitHub: `.github/workflows/windows.yml` builds on a clean Windows 2022 machine for every push
+and pull request, runs the tests and the smoke test, and uploads the zip, checksum and screenshots as artifacts. Push a tag
+such as `v0.1.0` and the zip and its checksum are attached to a GitHub release. Qt and the compiled OpenSSL are cached.
+
+**By hand** (if you prefer): install Visual Studio 2022 with *Desktop development with C++*, a Qt 6 *MSVC 2022 64-bit* kit and
+vcpkg; then, in an *x64 Native Tools Command Prompt*:
+`cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=<vcpkg>\scripts\buildsystems\vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static-md -DCMAKE_PREFIX_PATH=<Qt>\msvc2022_64 -S . -B build`,
+`cmake --build build`, `ctest --test-dir build`, then `windeployqt --qmldir app\qml build\app\tenchar.exe`.
+
+`transport_test` is skipped on Windows (it needs `sh` and the `openssl` tool). Data is kept in `%LOCALAPPDATA%\TenChar`.
+Not done: an MSI installer, and pinning vcpkg and the GitHub actions to exact commits (the build records what it used in `BUILD-INFO.txt`).
+
 ## What was verified
 
 | Area | Evidence |

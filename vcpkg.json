@@ -1,0 +1,6 @@
+{
+  "name": "tenchar-desktop",
+  "version-string": "0.1.0",
+  "description": "Native dependencies for the Windows build (OpenSSL 3). Qt comes from the Qt installer or aqtinstall.",
+  "dependencies": [ "openssl" ]
+}

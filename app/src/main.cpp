@@ -1,6 +1,7 @@
 #include <QAccessible>
 #include <QApplication>
 #include <QDir>
+#include <QFile>
 #include <QFontDatabase>
 #include <QIcon>
 #include <QLinearGradient>
@@ -106,7 +107,11 @@ int main(int argc, char** argv) {
 
     QtTransport transport(QStringLiteral("TenChar-desktop/") + AppVersion);
     tc::Engine::Deps deps;
+#ifdef _WIN32
+    deps.dataDir = std::filesystem::path(dataDir.toStdWString());   // not the ANSI code page: user names can be Bangla
+#else
     deps.dataDir = std::filesystem::path(dataDir.toStdString());
+#endif
     deps.transport = &transport;
     deps.rng = &tc::systemRandom();
     deps.segmenter = qtSegmenter();
@@ -159,17 +164,24 @@ int main(int argc, char** argv) {
     }
 
 #ifdef TC_DEV_TOOLS
-    if (app.arguments().contains("--a11y-dump")) {   // what a screen reader would be given for the current screen
-        QTimer::singleShot(1200, &app, [&] {
+    // --a11y-dump FILE: write what a screen reader would be given for the current screen. A file, not the console,
+    // because a Windows GUI program has no console to print to.
+    const int dumpAt = app.arguments().indexOf("--a11y-dump");
+    if (dumpAt >= 0 && dumpAt + 1 < app.arguments().size()) {
+        const QString dumpPath = app.arguments().at(dumpAt + 1);
+        QTimer::singleShot(1200, &app, [&app, window, dumpPath] {
             QAccessible::setActive(true);
+            QStringList lines;
             std::function<void(QAccessibleInterface*, int)> walk = [&](QAccessibleInterface* i, int depth) {
                 if (!i) return;
                 const QString name = i->text(QAccessible::Name);
                 if (!i->state().invisible && !i->state().invalid && (!name.isEmpty() || i->role() == QAccessible::Button))
-                    qInfo().noquote() << QString(depth * 2, ' ') + "role=" + QString::number(i->role()) + " name=\"" + name + "\"";
+                    lines << QString(depth * 2, ' ') + "role=" + QString::number(i->role()) + " name=\"" + name + "\"";
                 for (int c = 0; c < i->childCount(); ++c) walk(i->child(c), depth + 1);
             };
             walk(QAccessible::queryAccessibleInterface(window), 0);
+            QFile out(dumpPath);
+            if (out.open(QIODevice::WriteOnly | QIODevice::Text)) out.write(lines.join('\n').toUtf8());
             QCoreApplication::quit();
         });
     }

@@ -1,6 +1,8 @@
 # The Qt 6 application. Compiler warnings here are on but not fatal: Qt's own headers are not ours to fix.
 set_directory_properties(PROPERTIES COMPILE_OPTIONS "")
-if(NOT MSVC)
+if(MSVC)
+  add_compile_options(/W3 /utf-8)
+else()
   add_compile_options(-Wall -Wextra)
 endif()
 
@@ -24,7 +26,7 @@ if(APPLE)
   list(APPEND TC_APP_SOURCES src/platform_mac.mm)
 endif()
 
-add_executable(tenchar WIN32 MACOSX_BUNDLE ${TC_APP_SOURCES})
+qt_add_executable(tenchar WIN32 MACOSX_BUNDLE ${TC_APP_SOURCES})
 # Resource paths inside the binary: /qml/..., /fonts/..., /strings/...
 qt_add_resources(tenchar tenchar_qml PREFIX "/qml" BASE "qml" FILES ${TC_QML})
 qt_add_resources(tenchar tenchar_fonts PREFIX "/fonts" BASE "resources/fonts" FILES
@@ -39,8 +41,10 @@ if(TC_DEV_TOOLS)
   target_compile_definitions(tenchar PRIVATE TC_DEV_TOOLS)
 endif()
 
-# Tests that need Qt (the transport against a local HTTPS server). The Qt-free tests live in the top-level file.
-add_executable(transport_test ../tests/transport_test.cpp src/qt_transport.cpp)
-target_link_libraries(transport_test PRIVATE tc_relayclient Qt6::Core Qt6::Network)
-target_include_directories(transport_test PRIVATE ../tests)
-add_test(NAME transport_test COMMAND sh ${CMAKE_SOURCE_DIR}/tests/run_transport_test.sh $<TARGET_FILE:transport_test>)
+# Tests that need Qt (the transport against a local HTTPS server). Needs sh, python3 and the openssl tool, so not on Windows.
+if(NOT WIN32)
+  add_executable(transport_test ../tests/transport_test.cpp src/qt_transport.cpp)
+  target_link_libraries(transport_test PRIVATE tc_relayclient Qt6::Core Qt6::Network)
+  target_include_directories(transport_test PRIVATE ../tests)
+  add_test(NAME transport_test COMMAND sh ${CMAKE_SOURCE_DIR}/tests/run_transport_test.sh $<TARGET_FILE:transport_test>)
+endif()
