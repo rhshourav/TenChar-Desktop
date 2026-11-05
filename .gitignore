@@ -1,1 +1,7 @@
 build*/
+# Ignore dependency tracking and installer logs
+.deps/
+aqtinstall.log
+
+# Ignore build/distribution outputs
+dist/

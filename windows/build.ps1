@@ -20,6 +20,7 @@ param(
     [switch]$InstallPrereqs,                 # install what is missing
     [string]$QtDir = '',                     # e.g. C:\Qt\6.8.3\msvc2022_64 (a Qt 6.4 or newer MSVC kit)
     [string]$QtSpec = '6.8',                 # which Qt to fetch when none is found (a 6.8 LTS release)
+    [string]$OpenSslRoot = '',               # use a prebuilt OpenSSL 3 (folder with include\ lib\ bin\) instead of building one with vcpkg
     [string]$Triplet = 'x64-windows-static-md',  # OpenSSL linked statically, dynamic CRT (matches Qt). Fallback: x64-windows
     [ValidateSet('Release', 'RelWithDebInfo')][string]$Config = 'Release',
     [string]$DepsDir = '',                   # where downloaded Qt and vcpkg live (default: <repo>\.deps)
@@ -48,7 +49,13 @@ function Invoke-Checked {
 }
 
 function Update-SessionPath {
-    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+    # Add entries that an installer put on the machine/user PATH. Never replace the PATH: the compiler's paths from
+    # Visual Studio live only in this process.
+    $machineAndUser = ([Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')) -split ';'
+    $have = @($env:Path -split ';' | Where-Object { $_ })
+    foreach ($entry in $machineAndUser) {
+        if ($entry -and ($have -notcontains $entry)) { $env:Path = $env:Path + ';' + $entry; $have += $entry }
+    }
 }
 
 function Install-WithWinget {
@@ -141,23 +148,34 @@ foreach ($tool in 'cmake', 'ninja', 'cl') {
 }
 
 # ---- Python (only needed to fetch Qt and for the contrast test) ----------------------------------------------
-function Get-Python {
-    foreach ($c in 'python', 'py') {
-        $cmd = Get-Command $c -ErrorAction SilentlyContinue
-        if ($cmd -and $cmd.Source -notlike '*WindowsApps*') {   # the Microsoft Store stub is not a real Python
-            if ($c -eq 'py') { return @('py', '-3') }
-            return @('python')
-        }
+function Test-PythonWithPip([string]$Exe, [string[]]$Prefix) {
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'      # a native program's stderr must not become a terminating error here
+    try { & $Exe @($Prefix + @('-m', 'pip', '--version')) *> $null; return ($LASTEXITCODE -eq 0) }
+    catch { return $false }
+    finally { $ErrorActionPreference = $saved }
+}
+function Get-PythonExe {
+    # The py launcher first (it only sees real python.org installs), then python on PATH. A Python without pip
+    # (for example the one that ships with MSYS2) is skipped.
+    foreach ($c in 'py', 'python', 'python3') {
+        $cmd = Get-Command $c -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $cmd -or $cmd.Source -like '*WindowsApps*') { continue }   # the Microsoft Store stub is not a real Python
+        $prefix = @()
+        if ($c -eq 'py') { $prefix = @('-3') }
+        if (Test-PythonWithPip $c $prefix) { return $c }
+        Write-Host "skipping $($cmd.Source): it has no pip"
     }
     return $null
 }
 function Invoke-Python([string[]]$PyArgs, [switch]$Capture) {
-    $py = Get-Python
-    if (-not $py) { throw 'Python 3 was not found.' }
-    $pre = @()
-    if ($py.Count -gt 1) { $pre = $py[1..($py.Count - 1)] }
-    if ($Capture) { return (& $py[0] @($pre + $PyArgs)) }
-    Invoke-Checked $py[0] ($pre + $PyArgs)
+    $exe = Get-PythonExe
+    if (-not $exe) { throw 'Python 3 was not found.' }
+    $all = @()
+    if ($exe -eq 'py') { $all += '-3' }   # the py launcher needs to be told to use Python 3
+    $all += $PyArgs
+    if ($Capture) { return (& $exe @all) }
+    Invoke-Checked $exe $all
 }
 
 # ---- Qt 6 ----------------------------------------------------------------------------------------------------
@@ -179,7 +197,11 @@ Step 'Qt 6'
 $Qt = Find-Qt
 if (-not $Qt) {
     if (-not $InstallPrereqs) { throw 'Qt 6 (MSVC 2022 64-bit kit) was not found. Pass -QtDir, or re-run with -InstallPrereqs to download it with aqtinstall.' }
-    if (-not (Get-Python)) { Install-WithWinget -Id 'Python.Python.3.12' }
+    if (-not (Get-PythonExe)) {
+        Write-Host 'No Python with pip found; installing Python 3.12 with winget...'
+        Install-WithWinget -Id 'Python.Python.3.12'
+        if (-not (Get-PythonExe)) { throw 'Python was installed but is not usable yet. Close this window, open a new PowerShell as administrator and run the script again.' }
+    }
     Write-Host "Downloading Qt $QtSpec with aqtinstall (a third-party downloader; Qt itself comes from Qt's servers)..."
     Invoke-Python @('-m', 'pip', 'install', '--user', '--upgrade', 'aqtinstall')
     $ver = (Invoke-Python @('-m', 'aqt', 'list-qt', 'windows', 'desktop', '--spec', $QtSpec, '--latest-version') -Capture | Select-Object -Last 1).ToString().Trim()
@@ -192,43 +214,91 @@ Write-Host "using Qt at $Qt"
 
 # ---- vcpkg + OpenSSL --------------------------------------------------------------------------------------------
 function Get-VcpkgRoot {
+    # Visual Studio sets VCPKG_ROOT to its own bundled vcpkg. That copy is not a git checkout and refuses to build ports
+    # unless the project pins a vcpkg baseline, so it is skipped. A normal clone (our own, or the one on GitHub's runners) works.
     foreach ($r in @($env:VCPKG_ROOT, $env:VCPKG_INSTALLATION_ROOT, (Join-Path $DepsDir 'vcpkg'))) {
-        if ($r -and (Test-Path (Join-Path $r 'scripts\buildsystems\vcpkg.cmake'))) { return $r }
+        if (-not $r) { continue }
+        if ($r -like '*Microsoft Visual Studio*') { continue }
+        if (Test-Path (Join-Path $r 'scripts\buildsystems\vcpkg.cmake')) { return $r }
     }
     return $null
 }
 
-Step 'vcpkg (builds OpenSSL 3 from source)'
-$Vcpkg = Get-VcpkgRoot
-if (-not $Vcpkg) {
-    if (-not $InstallPrereqs) { throw 'vcpkg was not found. Set VCPKG_ROOT to an existing vcpkg, or re-run with -InstallPrereqs to clone one.' }
-    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Install-WithWinget -Id 'Git.Git' }
-    $Vcpkg = Join-Path $DepsDir 'vcpkg'
-    Invoke-Checked 'git' @('clone', '--depth', '1', 'https://github.com/microsoft/vcpkg', $Vcpkg)
-    Invoke-Checked (Join-Path $Vcpkg 'bootstrap-vcpkg.bat') @('-disableMetrics')
+$Vcpkg = $null
+if ($OpenSslRoot) {
+    Step 'OpenSSL (prebuilt)'
+    if (-not (Test-Path (Join-Path $OpenSslRoot 'include\openssl\evp.h'))) { throw "-OpenSslRoot '$OpenSslRoot' has no include\openssl\evp.h" }
+    Write-Host "using OpenSSL at $OpenSslRoot"
+} else {
+    Step 'vcpkg (builds OpenSSL 3 from source)'
+    $Vcpkg = Get-VcpkgRoot
+    if (-not $Vcpkg) {
+        if (-not $InstallPrereqs) { throw 'vcpkg was not found. Set VCPKG_ROOT to an existing vcpkg, or re-run with -InstallPrereqs to clone one.' }
+        if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Install-WithWinget -Id 'Git.Git' }
+        $Vcpkg = Join-Path $DepsDir 'vcpkg'
+        Invoke-Checked 'git' @('clone', '--depth', '1', 'https://github.com/microsoft/vcpkg', $Vcpkg)
+        Invoke-Checked (Join-Path $Vcpkg 'bootstrap-vcpkg.bat') @('-disableMetrics')
+    }
+    $env:VCPKG_ROOT = $Vcpkg
+    $env:VCPKG_DEFAULT_BINARY_CACHE = Join-Path $DepsDir 'vcpkg-archives'
+    New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+    Write-Host "using vcpkg at $Vcpkg"
 }
-$env:VCPKG_DEFAULT_BINARY_CACHE = Join-Path $DepsDir 'vcpkg-archives'
-New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
-Write-Host "using vcpkg at $Vcpkg"
 
 # ---- configure, build, test -----------------------------------------------------------------------------------
+$cache = Join-Path $Build 'CMakeCache.txt'
+if ($Vcpkg -and (Test-Path $cache)) {
+    $toolchainFile = Join-Path $Vcpkg 'scripts\buildsystems\vcpkg.cmake'
+    $wanted = ($toolchainFile -replace '\\', '/')
+    if (-not ((Get-Content $cache -Raw) -like "*$wanted*")) {
+        Write-Host 'The build folder was configured with a different toolchain; starting it afresh.'
+        $Clean = $true
+    }
+}
 if ($Clean -and (Test-Path $Build)) { Remove-Item -Recurse -Force $Build }
 
 function Invoke-Configure([string[]]$Extra) {
-    $cfg = @('-G', 'Ninja', '-S', $Repo, '-B', $Build, "-DCMAKE_BUILD_TYPE=$Config",
-             "-DCMAKE_TOOLCHAIN_FILE=$(Join-Path $Vcpkg 'scripts\buildsystems\vcpkg.cmake')",
-             "-DVCPKG_TARGET_TRIPLET=$Triplet", "-DVCPKG_INSTALLED_DIR=$(Join-Path $DepsDir 'vcpkg_installed')",
-             "-DCMAKE_PREFIX_PATH=$Qt", '-DTC_BUILD_APP=ON')
+    $cfg = @('-G', 'Ninja', '-S', $Repo, '-B', $Build, "-DCMAKE_BUILD_TYPE=$Config", "-DCMAKE_PREFIX_PATH=$Qt", '-DTC_BUILD_APP=ON')
+    if ($OpenSslRoot) {
+        $cfg += @("-DOPENSSL_ROOT_DIR=$OpenSslRoot")
+    } else {
+        $cfg += @("-DCMAKE_TOOLCHAIN_FILE=$(Join-Path $Vcpkg 'scripts\buildsystems\vcpkg.cmake')",
+                  "-DVCPKG_TARGET_TRIPLET=$Triplet", "-DVCPKG_INSTALLED_DIR=$(Join-Path $DepsDir 'vcpkg_installed')")
+    }
     Invoke-Checked 'cmake' ($cfg + $Extra)
 }
 
+# CMake's zip extractor sometimes fails on Strawberry Perl ("Can't restore time"), which the OpenSSL build needs. Unpack the
+# zip vcpkg already downloaded with .NET instead, where vcpkg looks for it, so that a retry finds Perl and skips extraction.
+function Repair-VcpkgPerl {
+    $dl = Join-Path $Vcpkg 'downloads'
+    $zip = Get-ChildItem -Path $dl -Filter 'strawberry-perl-*-portable.zip' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $zip) { return $false }
+    if ($zip.Name -notmatch 'strawberry-perl-([0-9.]+)-64bit-portable\.zip') { return $false }
+    $dest = Join-Path $dl ('tools\perl\' + $Matches[1])
+    if (Test-Path (Join-Path $dest 'perl\bin\perl.exe')) { return $false }   # Perl is already there: something else failed
+    Write-Host "CMake could not unpack $($zip.Name); unpacking it with .NET instead..."
+    if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, $dest)
+    return (Test-Path (Join-Path $dest 'perl\bin\perl.exe'))
+}
+
 Step 'Configuring (the first run builds OpenSSL, which takes several minutes)'
-Invoke-Configure @('-DTC_DEV_TOOLS=OFF')
+try {
+    Invoke-Configure @('-DTC_DEV_TOOLS=OFF')
+} catch {
+    if ($OpenSslRoot -or -not (Repair-VcpkgPerl)) { throw }
+    Write-Host 'Perl is in place; configuring again...'
+    Invoke-Configure @('-DTC_DEV_TOOLS=OFF')
+}
 Step 'Building'
 Invoke-Checked 'cmake' @('--build', $Build)
 
 $savedPath = $env:Path
 $env:Path = (Join-Path $Qt 'bin') + ';' + $env:Path     # so the test programs find Qt's DLLs
+if ($OpenSslRoot) { $env:Path = (Join-Path $OpenSslRoot 'bin') + ';' + $env:Path }
 
 if (-not $SkipTests) {
     Step 'Testing'
@@ -243,6 +313,7 @@ $Stage = Join-Path $OutDir 'TenChar-win64'
 if (Test-Path $Stage) { Remove-Item -Recurse -Force $Stage }
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 Copy-Item (Join-Path $Build 'app\tenchar.exe') $Stage
+if ($OpenSslRoot) { Copy-Item (Join-Path $OpenSslRoot 'bin\libcrypto*.dll') $Stage }   # a prebuilt OpenSSL is a DLL
 Invoke-Checked (Join-Path $Qt 'bin\windeployqt.exe') @('--release', '--qmldir', (Join-Path $Repo 'app\qml'), '--no-translations', '--compiler-runtime', (Join-Path $Stage 'tenchar.exe'))
 
 $notices = @"
@@ -282,7 +353,7 @@ $clVersion = (& cmd.exe /c "cl 2>&1" | Select-Object -First 1)   # cl prints its
     "config:    $Config",
     "qt:        $Qt",
     "compiler:  $clVersion",
-    "vcpkg:     $Vcpkg  (triplet $Triplet)",
+    "vcpkg:     $Vcpkg  (triplet $Triplet)  openssl-root: $OpenSslRoot",
     "signed:    $([bool]$SignThumbprint)",
     "sha256:    $hash  TenChar-win64.zip"
 ) | Set-Content -Path (Join-Path $OutDir 'BUILD-INFO.txt') -Encoding UTF8
