@@ -1,8 +1,9 @@
 # TenChar Desktop
 
 A native C++20 / Qt 6 client for the same two-person, 10-character messenger as the Android app. Same protocol, same
-relays, same look (dark, aurora, glass plates). Windows and macOS are the targets; **everything here was built and
-tested on Linux only** (see "What has not been tested").
+relays, same look (dark, aurora, glass plates). Windows and macOS are the targets. It is built and tested on Linux
+(Qt 6.4.2 and 6.8.4), and has been built and run on one Windows PC (Visual Studio 2022 Build Tools, Qt 6.8.3). **macOS has
+never been built** (see "What has NOT been tested").
 
 > **Do not rely on this for anything where a flaw could cause harm.** The handshake and ratchet (in Kotlin and in this
 > C++ port) have had no independent review. That review is the one thing this repository cannot supply.
@@ -17,7 +18,9 @@ tested on Linux only** (see "What has not been tested").
 | `session/` | the application logic (port of `AppViewModel.kt`): unlock, pairing, send, poll, lock, settings | no |
 | `app/` | Qt Quick interface (QML), Qt Network transport, controller, tray, platform calls | yes |
 | `vectors/` | independent reference vectors (`gen_vectors.py` writes `vectors.json`, written from the spec, not from either core) | |
-| `tests/` | all tests, the fake relay, the contrast test, the fuzzer | |
+| `tests/` | all tests, the fake relay, the contrast test, the fuzzer, the QML-warnings check | |
+| `windows/build.ps1`, `build-windows.bat`, `vcpkg.json`, `.github/workflows/windows.yml` | the automated Windows build and its cloud version | |
+| `docs/` | `BUILD-WINDOWS.md` (full Windows steps and troubleshooting), screenshots, the Kotlin fix prompt | |
 
 Only `core`, `vault` and `session` touch secrets. Every byte buffer is a `tc::Bytes`, a vector that overwrites its
 memory when freed.
@@ -27,43 +30,38 @@ memory when freed.
 ```
 sudo apt install cmake ninja-build g++ libssl-dev qt6-base-dev qt6-declarative-dev \
      qml6-module-qtquick qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qtqml-workerscript python3
-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -S . -B build && cmake --build build && ctest --test-dir build
-# sanitisers:  -DTC_SANITIZE=ON      developer screenshots with sample data:  -DTC_DEV_TOOLS=ON
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DTC_DEV_TOOLS=ON -S . -B build && cmake --build build && ctest --test-dir build
+# sanitisers:  -DTC_SANITIZE=ON      only the Qt-free targets:  -DTC_BUILD_APP=OFF
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software build/app/tenchar --preview chat --grab chat.png
 ```
 
-`TC_BUILD_APP=OFF` builds and tests only the Qt-free targets.
+`ctest` runs nine suites: `core_tests`, `vault_tests`, `relay_tests`, `session_tests`, `fuzz_tests`, `strings_tests`,
+`contrast`, `transport_test` and (with `-DTC_DEV_TOOLS=ON`) `qml_warnings`. `-DTC_DEV_TOOLS=ON` also enables the developer
+options `--preview NAME`, `--grab FILE`, `--click X,Y`, `--wheel DY`, `--keys TEXT` and `--a11y-dump FILE`; leave it off for releases.
 
-## Build on Windows (automated; the scripts have not been run on Windows yet: report the first error you hit)
+## Build on Windows
 
-**One command, locally.** Double-click `build-windows.bat` (the first time, right-click → *Run as administrator*), or:
+Full steps, switches and a troubleshooting table are in **[docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md)**. The short version,
+from an **administrator PowerShell** (the first time only; later runs do not need it):
 
 ```
-powershell -ExecutionPolicy Bypass -File windows\build.ps1 -InstallPrereqs
+winget install ShiningLight.OpenSSL.Dev
+cd D:\GITHUB\TenChar-Desktop
+powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\build.ps1 -InstallPrereqs -OpenSslRoot "C:\Program Files\OpenSSL-Win64"
 ```
 
-It finds or installs Visual Studio Build Tools (winget), Git and Python (winget), Qt 6.8 (aqtinstall) and OpenSSL 3 (vcpkg,
-linked statically), then configures, builds, runs all tests, collects the Qt runtime with `windeployqt`, and writes:
+The script installs or finds Visual Studio's C++ tools, downloads Qt 6.8, compiles, runs the tests, collects the Qt runtime and writes
+`dist\TenChar-win64\tenchar.exe` (run it from there), `dist\TenChar-win64.zip`, a `.sha256` file and `dist\BUILD-INFO.txt`.
+The first run takes 20 to 40 minutes; later runs a few. Double-clicking `build-windows.bat` (run as administrator) does the
+same thing without `-OpenSslRoot`.
 
-- `dist\TenChar-win64\tenchar.exe` (run it from there), with `THIRD-PARTY-NOTICES.txt` and font licences
-- `dist\TenChar-win64.zip` and `dist\TenChar-win64.zip.sha256`
-- `dist\BUILD-INFO.txt` (commit, compiler, Qt, vcpkg, hash)
-
-Useful switches: `-QtDir C:\Qt\6.8.3\msvc2022_64` (use a Qt you already have), `-Smoke` (launch the real app headless and
-screenshot seven screens, plus the accessibility tree, into `dist\smoke`), `-Clean`, `-SkipTests`,
-`-Triplet x64-windows` (OpenSSL as a DLL instead of static), `-SignThumbprint <sha1>` (sign `tenchar.exe` with a certificate).
-
-**In the cloud.** Push the repository to GitHub: `.github/workflows/windows.yml` builds on a clean Windows 2022 machine for every push
-and pull request, runs the tests and the smoke test, and uploads the zip, checksum and screenshots as artifacts. Push a tag
-such as `v0.1.0` and the zip and its checksum are attached to a GitHub release. Qt and the compiled OpenSSL are cached.
-
-**By hand** (if you prefer): install Visual Studio 2022 with *Desktop development with C++*, a Qt 6 *MSVC 2022 64-bit* kit and
-vcpkg; then, in an *x64 Native Tools Command Prompt*:
-`cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=<vcpkg>\scripts\buildsystems\vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static-md -DCMAKE_PREFIX_PATH=<Qt>\msvc2022_64 -S . -B build`,
-`cmake --build build`, `ctest --test-dir build`, then `windeployqt --qmldir app\qml build\app\tenchar.exe`.
-
-`transport_test` is skipped on Windows (it needs `sh` and the `openssl` tool). Data is kept in `%LOCALAPPDATA%\TenChar`.
-Not done: an MSI installer, and pinning vcpkg and the GitHub actions to exact commits (the build records what it used in `BUILD-INFO.txt`).
+- **Why a prebuilt OpenSSL:** without `-OpenSslRoot` the script has vcpkg build OpenSSL from source. On the one PC tried, that
+  build failed in OpenSSL's own configure step for a reason nobody has read from the log yet. The prebuilt OpenSSL is a
+  third-party binary, fine to get running but not what you should ship.
+- **Switches:** `-QtDir`, `-Clean`, `-SkipTests`, `-Smoke`, `-Triplet`, `-DepsDir`, `-OutDir`, `-SignThumbprint` (all in the doc).
+- **In the cloud:** `.github/workflows/windows.yml` builds on a clean Windows machine on every push (vcpkg route; its first run
+  has not been checked) and attaches the zip to a release when you push a tag such as `v0.1.0`.
+- **Data** is kept in `%LOCALAPPDATA%\TenChar`. Not done: an MSI installer, and pinning vcpkg and the GitHub actions to exact commits.
 
 ## What was verified
 
@@ -108,9 +106,12 @@ Not done: an MSI installer, and pinning vcpkg and the GitHub actions to exact co
 
 ## What has NOT been tested (be honest with yourself about these)
 
-- **Windows and macOS builds.** Not compiled. `platform_mac.mm` (capture exclusion), the Windows branches of
-  `platform.cpp` and `vault.cpp` (display affinity, clipboard-history exclusion, `MoveFileExW`) were written carefully
-  but never run. MSVC `/W4 /WX` may need small fixes.
+- **macOS.** Never built. `platform_mac.mm` (capture exclusion) was written but not compiled.
+- **Windows beyond one PC.** The app was built and run on one Windows machine. The Windows-only code (display affinity,
+  clipboard-history exclusion, atomic file replace) has not been checked to *work*, and the interface fix for Qt 6.8
+  (dialogs moved out of the scrolling column) is verified on Linux with Qt 6.8.4 but not yet confirmed on that Windows PC.
+  The OpenSSL build through vcpkg failed there; the prebuilt-OpenSSL route and OpenSSL 4.x are untested against this code.
+  The GitHub Actions workflow has never run.
 - **A real relay.** `relay/src/core.js` was not available. The relay client follows `RelayClient.kt`; the fake relay
   in `tests/fake_relay.hpp` is *my reading of that protocol*, so agreement with it proves consistency, not correctness.
   Live phone↔desktop interop is still to do (Gate C).
@@ -118,7 +119,7 @@ Not done: an MSI installer, and pinning vcpkg and the GitHub actions to exact co
 - **Real Bangla input** through an operating-system IME, and the 10-character counter against the phone on a shared
   list of test strings (Qt 6.4's Unicode tables may differ from ICU for conjuncts).
 - **GPU performance.** Screenshots used the software renderer. The 60 fps / idle-CPU targets are unmeasured.
-- Qt **6.4** was what the sandbox had; the plan wants the current LTS. Nothing here needs more than 6.4.
+- Qt versions: 6.4.2 and 6.8.4 on Linux (software renderer, headless) and 6.8.3 on one Windows PC. The newest LTS is not tried.
 - Installers, signing, notarisation, checksummed dependency pins, reproducible builds: not started.
 - Start at login, locking on OS screen lock, Argon2id (PBKDF2 used, awaiting your decision), changing the passphrase
   from the UI (the vault supports it), `mlock` of secret pages, Windows DPAPI / macOS Keychain wrapping.

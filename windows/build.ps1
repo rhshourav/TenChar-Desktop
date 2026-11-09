@@ -9,11 +9,15 @@
   Qt through aqtinstall; OpenSSL through vcpkg), then builds. Run from an administrator shell the first time.
 
 .EXAMPLE
+  powershell -ExecutionPolicy Bypass -File windows\build.ps1 -InstallPrereqs -OpenSslRoot "C:\Program Files\OpenSSL-Win64"
+  Recommended: use a prebuilt OpenSSL (winget install ShiningLight.OpenSSL.Dev) instead of building one with vcpkg.
+
+.EXAMPLE
   powershell -ExecutionPolicy Bypass -File windows\build.ps1 -QtDir C:\Qt\6.8.3\msvc2022_64
   Use a Qt you already installed. Nothing else is installed unless you also pass -InstallPrereqs.
 
 Output: dist\TenChar-win64\ (run tenchar.exe from there), dist\TenChar-win64.zip, dist\TenChar-win64.zip.sha256,
-        dist\BUILD-INFO.txt. NOT tested on Windows by the author: if a step fails, the message names it.
+        dist\BUILD-INFO.txt. Full steps and a troubleshooting table: docs\BUILD-WINDOWS.md. If a step fails, a diagnostics block is printed: send all of it.
 #>
 [CmdletBinding()]
 param(
