@@ -10,6 +10,7 @@ Item {
     width: diameter
     height: diameter
     anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
+    readonly property bool windowActive: Window.active
     Accessible.ignored: true
 
     Repeater {
@@ -20,7 +21,7 @@ Item {
     Item {
         id: orbit
         anchors.fill: parent
-        NumberAnimation on rotation { from: 0; to: 360; duration: 40000; loops: Animation.Infinite; running: !ui.reducedMotion && Window.active }
+        NumberAnimation on rotation { from: 0; to: 360; duration: 40000; loops: Animation.Infinite; running: !ui.reducedMotion && h.windowActive }
         Repeater {
             model: [{ a: 200, c: Tc.mint, r: 4 }, { a: 320, c: Tc.peach, r: 3 }, { a: 85, c: Tc.lavenderSoft, r: 5 }]
             GlowDot {

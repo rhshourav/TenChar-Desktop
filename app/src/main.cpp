@@ -1,4 +1,7 @@
 #include <QAccessible>
+#include <QWheelEvent>
+#include <QMouseEvent>
+#include <QKeyEvent>
 #include <QApplication>
 #include <QDir>
 #include <QFile>
@@ -156,8 +159,58 @@ int main(int argc, char** argv) {
     }
     ui.setWindow(window);
 
+#ifdef TC_DEV_TOOLS
+    // --wheel DY and --click X,Y inject input before the screenshot, to test scrolling and clicking without a person.
+    {
+        const QStringList a = app.arguments();
+        const int w = a.indexOf("--wheel"), c = a.indexOf("--click");
+        if (w >= 0 && w + 1 < a.size()) {
+            const int dy = a.at(w + 1).toInt();
+            QTimer::singleShot(1000, &app, [window, dy] {
+                for (int i = 0; i < 6; ++i) {
+                    QWheelEvent ev(QPointF(200, 300), QPointF(200, 300), QPoint(), QPoint(0, dy), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+                    QCoreApplication::sendEvent(window, &ev);
+                }
+            });
+        }
+        const int k = a.indexOf("--keys");
+        if (k >= 0 && k + 1 < a.size()) {
+            const QString seq = a.at(k + 1);
+            QTimer::singleShot(900, &app, [window, seq] {
+                auto send = [window](int key, const QString& text) {
+                    QKeyEvent down(QEvent::KeyPress, key, Qt::NoModifier, text);
+                    QCoreApplication::sendEvent(window, &down);
+                    QKeyEvent up(QEvent::KeyRelease, key, Qt::NoModifier, text);
+                    QCoreApplication::sendEvent(window, &up);
+                };
+                for (int i = 0; i < seq.size(); ++i) {
+                    if (seq[i] == '~' && i + 1 < seq.size()) {
+                        const QChar c = seq[++i];
+                        if (c == 'T') send(Qt::Key_Tab, QString());
+                        else if (c == 'E') send(Qt::Key_Return, QStringLiteral("\r"));
+                    } else {
+                        send(seq[i].toUpper().unicode(), QString(seq[i]));
+                    }
+                }
+            });
+        }
+        if (c >= 0 && c + 1 < a.size()) {
+            const QStringList xy = a.at(c + 1).split(',');
+            QTimer::singleShot(700, &app, [window, xy] {
+                const QPointF p(xy.value(0).toDouble(), xy.value(1).toDouble());
+                QMouseEvent press(QEvent::MouseButtonPress, p, p, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(window, &press);
+                QMouseEvent release(QEvent::MouseButtonRelease, p, p, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(window, &release);
+            });
+        }
+    }
+#endif
     if (!grabPath.isEmpty()) {
-        QTimer::singleShot(1500, &app, [&] {
+        int grabAfter = 1500;
+        const int d = app.arguments().indexOf("--delay");
+        if (d >= 0 && d + 1 < app.arguments().size()) grabAfter = app.arguments().at(d + 1).toInt();
+        QTimer::singleShot(grabAfter, &app, [&] {
             window->grabWindow().save(grabPath);
             QCoreApplication::quit();
         });

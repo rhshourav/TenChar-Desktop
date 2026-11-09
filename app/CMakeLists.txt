@@ -14,7 +14,7 @@ option(TC_DEV_TOOLS "Enable --preview and --grab (developer screenshots with sam
 
 set(TC_QML
   qml/qmldir qml/Tc.qml qml/Tx.qml qml/TcIcon.qml qml/Aurora.qml qml/GlassPlate.qml qml/GlowDot.qml qml/FocusRing.qml
-  qml/TcButton.qml qml/IconButton.qml qml/GlassChip.qml qml/GlassCard.qml qml/GlassRow.qml qml/GlassSwitchRow.qml
+  qml/TcButton.qml qml/IconButton.qml qml/GlassChip.qml qml/GlassCard.qml qml/GlassRow.qml qml/GlassSwitchRow.qml qml/Message.qml
   qml/RadioRow.qml qml/RowDivider.qml qml/SectionTitle.qml qml/Note.qml qml/Spacer.qml qml/TcField.qml qml/Headline.qml
   qml/BodyText.qml qml/Hero.qml qml/HeroBlock.qml qml/CodeBlock.qml qml/WaitingDots.qml qml/HeaderBar.qml qml/ScreenFrame.qml
   qml/TextButton.qml qml/Dialog.qml qml/RelayDialog.qml qml/NoticeCard.qml qml/AutoLockCard.qml qml/RelayCard.qml
@@ -47,4 +47,9 @@ if(NOT WIN32)
   target_link_libraries(transport_test PRIVATE tc_relayclient Qt6::Core Qt6::Network)
   target_include_directories(transport_test PRIVATE ../tests)
   add_test(NAME transport_test COMMAND sh ${CMAKE_SOURCE_DIR}/tests/run_transport_test.sh $<TARGET_FILE:transport_test>)
+endif()
+
+# Launches every screen and the clicks that once broke the layout; fails on any QML warning. Needs TC_DEV_TOOLS and a POSIX shell.
+if(TC_DEV_TOOLS AND NOT WIN32)
+  add_test(NAME qml_warnings COMMAND bash ${CMAKE_SOURCE_DIR}/tests/qml_warnings.sh $<TARGET_FILE:tenchar>)
 endif()

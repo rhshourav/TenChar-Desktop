@@ -4,8 +4,8 @@ import QtQuick.Window
 Window {
     id: win
     visible: true
-    width: 420
-    height: 640
+    width: 440
+    height: 720
     minimumWidth: 360
     minimumHeight: 520
     color: Tc.space
@@ -46,7 +46,7 @@ Window {
     }
 
     // Any pointer movement counts as activity for the inactivity lock; clicks pass through.
-    MouseArea { anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton; onPositionChanged: ui.activity() }
+    Item { anchors.fill: parent; HoverHandler { onPointChanged: ui.activity() } }
 
     Shortcut { sequences: ["Ctrl+L"]; onActivated: ui.lock() }
     Shortcut { sequences: ["Ctrl+,"]; onActivated: if (ui.screen === "chat") ui.open("settings") }

@@ -98,6 +98,13 @@ Not done: an MSI installer, and pinning vcpkg and the GitHub actions to exact co
 4. **State file format** is the phone's `StateCodec` *after* the version-2 change in `fix-prompt-kotlin-core.md`:
    strings are a `u16` length plus standard UTF-8, not Java's modified UTF-8. The header's chain counters are big-endian.
 5. Reduced transparency, motion and high contrast are **in-app switches only** (no OS detection yet).
+6. **Dialogs were inside the scrolling column** on Setup, Pair, Enter-code and Settings. Qt 6.4 tolerated it silently, so
+   nothing showed up in the first round of testing; Qt 6.8 says "Column will not function" and the layout dies once anything
+   changes (error text stuck at the top-left, no scrolling, dialogs never opening). Found from a Windows screenshot. Dialogs now
+   live in an overlay layer, messages use fixed-height slots, the first-run screen asks for the passphrase *first*, a focused
+   field scrolls into view, and there is a visible scroll bar. `tests/qml_warnings.sh` launches every screen and the clicks that
+   broke, on a `-DTC_DEV_TOOLS=ON` build, and fails on any QML warning (checked: it fails with the original bug put back).
+   The interface is now verified on **Qt 6.4.2 and Qt 6.8.4** (Linux, software renderer, headless).
 
 ## What has NOT been tested (be honest with yourself about these)
 

@@ -37,7 +37,7 @@ Item {
             }
         }
 
-        Column {   // empty state
+        Item {   // empty state
             visible: rep.count === 0
             anchors { top: banner.bottom; bottom: composer.top; left: parent.left; right: parent.right }
             Item {
@@ -110,15 +110,15 @@ Item {
                             }
                             Tx { id: msg; x: 18; y: 12; width: parent.width - 36; kind: "titleL"; font.weight: Font.Medium; text: model.text; Accessible.ignored: true }
                         }
-                        Row {
+                        Item {
                             id: status
                             visible: row.deliveryText !== ""
                             anchors { top: bubble.bottom; topMargin: 4 }
                             x: row.mine ? row.width - width - 6 : 6
-                            spacing: 8
                             height: 17
+                            width: 14 + statusText.implicitWidth
                             GlowDot { anchors.verticalCenter: parent.verticalCenter; diameter: 6; color: model.delivery === "sent" ? Tc.mint : Tc.peach }
-                            Tx { kind: "labelS"; text: row.deliveryText; color: Tc.inkMuted; wrapMode: Text.NoWrap; Accessible.ignored: true }
+                            Tx { id: statusText; x: 14; kind: "labelS"; text: row.deliveryText; color: Tc.inkMuted; wrapMode: Text.NoWrap; Accessible.ignored: true }
                         }
                     }
                 }

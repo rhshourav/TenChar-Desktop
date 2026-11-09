@@ -9,7 +9,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(TC_SANITIZE "Build core tests with address and undefined-behaviour sanitisers" OFF)
 option(TC_BUILD_APP "Build the Qt 6 application" ON)
 
-find_package(OpenSSL 3.0 REQUIRED)
+find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 find_package(Threads REQUIRED)
 
 # Warnings as errors: on for GCC/Clang. Off by default for MSVC, which has not been tried on this code yet.

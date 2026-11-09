@@ -15,5 +15,5 @@ ScreenFrame {
         TcButton { text: ui.strings.pair_make; onClicked: ui.startWaiting() },
         TcButton { text: ui.strings.pair_have; kind: "glass"; onClicked: ui.openEnterCode() }
     ]
-    RelayDialog { id: relayDialog }
+    overlays: [ RelayDialog { id: relayDialog } ]
 }

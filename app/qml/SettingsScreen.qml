@@ -45,7 +45,8 @@ ScreenFrame {
     }
     Spacer { size: 24 }
 
-    RelayDialog { id: relayDialog }
+    overlays: [
+    RelayDialog { id: relayDialog },
     Dialog {
         id: numberDialog
         title: ui.strings.settings_show_number
@@ -57,7 +58,7 @@ ScreenFrame {
             Accessible.name: ui.verification.replace(/ /g, "").split("").join(" ")
         }
         buttons: [ TextButton { text: ui.strings.dialog_close; onClicked: numberDialog.hide() } ]
-    }
+    },
     Dialog {
         id: forgetDialog
         title: ui.strings.forget_confirm_title
@@ -67,4 +68,5 @@ ScreenFrame {
             TextButton { text: ui.strings.forget_confirm_yes; color: Tc.peachText; onClicked: { forgetDialog.hide(); ui.forgetConversation() } }
         ]
     }
+    ]
 }

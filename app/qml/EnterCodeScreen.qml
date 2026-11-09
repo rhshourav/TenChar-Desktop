@@ -43,13 +43,7 @@ ScreenFrame {
     }
     Spacer { size: 24 }
     RelayCard { onEditRequested: relayDialog.open("main") }
-    Tx {
-        visible: s.showError
-        width: parent.width; topPadding: 16
-        kind: "bodyM"; color: Tc.peachText; horizontalAlignment: Text.AlignHCenter
-        text: ui.strings.enter_invalid
-        Accessible.role: Accessible.AlertMessage
-    }
+    Message { text: s.showError ? ui.strings.enter_invalid : "" }
     footer: [ TcButton { text: ui.strings.enter_join; enabled: s.valid; onClicked: s.join() } ]
-    RelayDialog { id: relayDialog }
+    overlays: [ RelayDialog { id: relayDialog } ]
 }

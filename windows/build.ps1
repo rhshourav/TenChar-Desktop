@@ -255,17 +255,62 @@ if ($Vcpkg -and (Test-Path $cache)) {
         $Clean = $true
     }
 }
+if ($OpenSslRoot -and (Test-Path $cache)) {
+    # A build folder that was configured for vcpkg remembers the vcpkg toolchain and would build OpenSSL from source again.
+    if ((Get-Content $cache -Raw) -match 'vcpkg') {
+        Write-Host 'The build folder was configured for vcpkg; starting it afresh for the prebuilt OpenSSL.'
+        $Clean = $true
+    }
+}
 if ($Clean -and (Test-Path $Build)) { Remove-Item -Recurse -Force $Build }
+
+function Show-ConfigureDiagnostics {
+    # "unable to find Ninja" / "CMAKE_CXX_COMPILER not set" are usually only the LAST symptom. Show what actually failed.
+    Write-Host ''
+    Write-Host '--- diagnostics (the real cause is usually here) ---' -ForegroundColor Yellow
+    $vlog = Join-Path $Build 'vcpkg-manifest-install.log'
+    if (Test-Path $vlog) {
+        Write-Host "vcpkg log ($vlog), error lines and the last lines:"
+        Get-Content $vlog | Select-String -Pattern 'error|Error|failed|FAILED' | Select-Object -Last 15 | ForEach-Object { Write-Host "  $($_.Line)" }
+        Write-Host '  ...'
+        Get-Content $vlog -Tail 25 | ForEach-Object { Write-Host "  $_" }
+    } else {
+        Write-Host 'no vcpkg log was written (vcpkg did not run, or this build does not use it)'
+    }
+    if ($Vcpkg -and (Test-Path (Join-Path $Vcpkg 'buildtrees'))) {
+        $logs = Get-ChildItem -Path (Join-Path $Vcpkg 'buildtrees') -Recurse -Filter '*-err.log' -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 2
+        foreach ($l in $logs) {
+            Write-Host ''
+            Write-Host "vcpkg package log $($l.FullName) (last 40 lines):" -ForegroundColor Yellow
+            Get-Content $l.FullName -Tail 40 | ForEach-Object { Write-Host "  $_" }
+        }
+    }
+    foreach ($tool in 'cmake', 'ninja', 'cl') {
+        $c = Get-Command $tool -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($c) { Write-Host "$tool : $($c.Source)" } else { Write-Host "$tool : NOT FOUND on PATH" }
+    }
+    $err = Join-Path $Build 'CMakeFiles\CMakeError.log'
+    if (Test-Path $err) { Write-Host 'CMakeError.log (last lines):'; Get-Content $err -Tail 15 | ForEach-Object { Write-Host "  $_" } }
+    Write-Host 'If the vcpkg log mentions a build failure, send me those lines. Re-running with -Clean also clears stale state.'
+    Write-Host '-----------------------------------------------------' -ForegroundColor Yellow
+}
 
 function Invoke-Configure([string[]]$Extra) {
     $cfg = @('-G', 'Ninja', '-S', $Repo, '-B', $Build, "-DCMAKE_BUILD_TYPE=$Config", "-DCMAKE_PREFIX_PATH=$Qt", '-DTC_BUILD_APP=ON')
     if ($OpenSslRoot) {
-        $cfg += @("-DOPENSSL_ROOT_DIR=$OpenSslRoot")
+        $lib = Get-ChildItem -Path (Join-Path $OpenSslRoot 'lib') -Recurse -Filter 'libcrypto*.lib' -ErrorAction SilentlyContinue |
+               Where-Object { $_.FullName -notmatch 'static' -and $_.Name -notmatch 'libcryptod' } |
+               Sort-Object { if ($_.FullName -match '\\MD\\') { 0 } else { 1 } } | Select-Object -First 1
+        $cfg += @("-DOPENSSL_ROOT_DIR=$OpenSslRoot", "-DOPENSSL_INCLUDE_DIR=$(Join-Path $OpenSslRoot 'include')")
+        if ($lib) { $cfg += @("-DOPENSSL_CRYPTO_LIBRARY=$($lib.FullName)"); Write-Host "using OpenSSL library $($lib.FullName)" }
+        else { Write-Warning "no libcrypto*.lib found under $OpenSslRoot\lib; is this the 'Dev' build of OpenSSL (with libraries)?" }
     } else {
         $cfg += @("-DCMAKE_TOOLCHAIN_FILE=$(Join-Path $Vcpkg 'scripts\buildsystems\vcpkg.cmake')",
                   "-DVCPKG_TARGET_TRIPLET=$Triplet", "-DVCPKG_INSTALLED_DIR=$(Join-Path $DepsDir 'vcpkg_installed')")
     }
-    Invoke-Checked 'cmake' ($cfg + $Extra)
+    try { Invoke-Checked 'cmake' ($cfg + $Extra) }
+    catch { Show-ConfigureDiagnostics; throw }
 }
 
 # CMake's zip extractor sometimes fails on Strawberry Perl ("Can't restore time"), which the OpenSSL build needs. Unpack the
@@ -285,7 +330,7 @@ function Repair-VcpkgPerl {
     return (Test-Path (Join-Path $dest 'perl\bin\perl.exe'))
 }
 
-Step 'Configuring (the first run builds OpenSSL, which takes several minutes)'
+if ($OpenSslRoot) { Step 'Configuring' } else { Step 'Configuring (the first run builds OpenSSL, which takes several minutes)' }
 try {
     Invoke-Configure @('-DTC_DEV_TOOLS=OFF')
 } catch {
